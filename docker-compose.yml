@@ -3,6 +3,7 @@ services:
   node-1:
     container_name: node-1
     image: fragchain:latest
+    entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
         ipv4_address: 172.16.0.10
@@ -15,6 +16,7 @@ services:
   node-2:
     container_name: node-2
     image: fragchain:latest
+    entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
         ipv4_address: 172.16.0.20
