@@ -1,5 +1,5 @@
 {
   "MESSENGER_SERVER_PORT": 4444,
   "VAULTS": [],
-  "TEMP_DIR": "/vault/tmp"
+  "TEMP_DIR": "E:/vault/vault/tmp"
 }
