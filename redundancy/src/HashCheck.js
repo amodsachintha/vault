@@ -1,10 +1,7 @@
 const md5File = require('md5-file');
+const crypto = require('crypto');
 
-class HashCheck {
-    constructor() {
-    }
-
-    static verifyIntegrity(original, copy) {
+    const verifyIntegrity = (original, copy) => {
         const hash1 = md5File.sync(original);
         console.log(hash1);
         const hash2 = md5File.sync(copy);
@@ -17,9 +14,14 @@ class HashCheck {
         }
     }
 
-    static getHash(file) {
+    const  getHash = (file) => {
         return md5File.sync(file);
     }
-}
 
-module.exports = HashCheck;
+    const  getStringHash = (string) => {
+        return crypto.createHash('md5').update(string).digest('hex');
+    }
+
+    module.exports = {
+        verifyIntegrity,getHash,getStringHash
+    };

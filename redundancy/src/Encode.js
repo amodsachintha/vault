@@ -6,6 +6,7 @@ const logger = require('../../logger').getLogger('redundancy-encoder');
 //file-split modules
 const config = require('../../config');
 const getHash = require("./HashCheck").getHash;
+const getStringHash = require("./HashCheck").getStringHash;
 
 let mainBuff, mainBuffSize, subBuffSize, shardCount = 4, block, filename, extension;
 
@@ -128,14 +129,17 @@ const encode = () => {
             }
         }
 
-        let p1 = createShard(shard1, filename + '.1' + extension, block, 1);
-        let p2 = createShard(shard2, filename + '.2' + extension, block, 2);
-        let p3 = createShard(shard3, filename + '.3' + extension, block, 3);
-        let p4 = createShard(shard4, filename + '.4' + extension, block, 4);
-        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), filename + '.p1' + extension, block, 5);
-        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), filename + '.p2' + extension, block, 6);
+        let p1 = createShard(shard1, getStringHash(block.owner.uuid + '.1' + Date.now() + filename )+'1', 1);
+        let p2 = createShard(shard2, getStringHash(block.owner.uuid + '.2' + Date.now() + filename )+'2', 2);
+        let p3 = createShard(shard3, getStringHash(block.owner.uuid + '.3' + Date.now() + filename )+'3', 3);
+        let p4 = createShard(shard4, getStringHash(block.owner.uuid + '.4' + Date.now() + filename )+'4', 4);
+        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), getStringHash(block.owner.uuid + '.5' + Date.now() + filename )+'5', 5);
+        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + filename )+'6', 6);
         return Promise.all([p1, p2, p3, p4, p5, p6]).then((arr) => {
             block.transactions[0].frags = arr;
+            try {
+                fs.unlinkSync(filename + extension);
+            } catch(err) {console.error(err)}
             return block;
         }).catch(er => {
             logger.error(er);
@@ -164,18 +168,18 @@ const generateLastShard = (shard) => {
     }
 };
 
-const createShard = (shard, name, block, count) => {
+const createShard = (shard, name, count) => {
     return new Promise((resolve, reject) => {
         try {
-            fs.writeFile(name, shard, function (err) {
+            fs.writeFile(config.TEMP_DIR+'/'+name, shard, function (err) {
                 if (err) {
                     reject(err)
                 }
                 let frag = {
                     index: count,
                     RSfragCount: 6,
-                    fragHash: getHash(name),
-                    fragLocation: 'Mars :D'
+                    fragHash: getHash(config.TEMP_DIR+'/'+name),
+                    fragLocation: name
                 };
                 resolve(frag)
             });
