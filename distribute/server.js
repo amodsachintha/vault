@@ -13,7 +13,7 @@ app.post('/upload/:filename', function (req, res) {
     let dst = fs.createWriteStream('../files/'+filename);
     req.pipe(dst);
     dst.on('drain', function() {
-      console.log('drain', new Date());
+      // console.log('drain', new Date());
       req.resume();
     });
     req.on('end', function () {
@@ -26,7 +26,7 @@ app.post('/download/:filename', function (req, res) {
     let dst = fs.createWriteStream('../tmp/'+filename);
     req.pipe(dst);
     dst.on('drain', function() {
-      console.log('drain', new Date());
+      // console.log('drain', new Date());
       req.resume();
     });
     req.on('end', function () {

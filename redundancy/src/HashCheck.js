@@ -12,15 +12,15 @@ const crypto = require('crypto');
         } else {
             console.log('Not verified');
         }
-    }
+    };
 
     const  getHash = (file) => {
         return md5File.sync(file);
-    }
+    };
 
     const  getStringHash = (string) => {
         return crypto.createHash('md5').update(string).digest('hex');
-    }
+    };
 
     module.exports = {
         verifyIntegrity,getHash,getStringHash

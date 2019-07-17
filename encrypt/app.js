@@ -9,22 +9,22 @@ const app = express();
 const enc = require('../redundancy/index');
 const logger = require('../logger').getLogger('encrypt');
 const config = require('../config');
+const download = require('../distribute/download').download;
+const fragchain = require('../fragchain/index');
+const cors = require('cors');
+let chain = null;
 
-app.use(function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
-});
+app.use(cors());
 
+enc.setBlockchainRef(fragchain);
 
 app.get('/', function (req, res) {
     res.sendFile(__dirname + '/index.html');
 });
 
-
 app.post('/encrypt', function (req, res) {
     const block = {
-        owner:{
+        owner: {
             uuid: '000000-00000000-00000000',
             name: 'Vault Genesis Block',
             username: 'vault',
@@ -33,7 +33,7 @@ app.post('/encrypt', function (req, res) {
             masterKey: 'vault.genesis',
             createdAt: new Date()
         },
-        file:{
+        file: {
             fileName: '',
             fileSize: 0,
             fileHash: ''
@@ -46,7 +46,6 @@ app.post('/encrypt', function (req, res) {
     busboy.on('file', function (fieldname, file, filename, encoding, mimetype) {
         logger.info(`Uploading: ${filename} mime: ${mimetype}`);
         block.file.fileName = filename;
-        block.file.fileSize = 12345;
         block.file.fileHash = '0000000000000000000000000000000000000000000000000000000000000000';
         let transaction = {
             index: 1,
@@ -59,31 +58,35 @@ app.post('/encrypt', function (req, res) {
             extension: '.enc',
         };
         let handle = null;
-        if (checkExtension(filename)) {
-            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-            try{
-                handle = file.pipe(cipher).
-                pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-            }catch (e) {
-                logger.error(e)
-            }
 
-        } else {
-            const zip = zlib.createGzip();
-            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-            try{
-                handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-            }catch (e) {
-                logger.error(e)
-            }
-        }
+        handle = file.pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
 
-        handle.on('finish',()=>{
+        // if (checkExtension(filename)) {
+        //     // encrypt only
+        //     const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
+        //     try {
+        //         handle = file.pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
+        //     } catch (e) {
+        //         logger.error(e)
+        //     }
+        // } else {
+        //     // zip and encrypt
+        //     const zip = zlib.createGzip();
+        //     const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
+        //     try {
+        //         handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
+        //     } catch (e) {
+        //         logger.error(e)
+        //     }
+        // }
+
+        handle.on('finish', () => {
             logger.warn('Handle Finish');
             transaction.encFragHash = md5File.sync(`${config.TEMP_DIR}/${filename}.enc`);
             block.transactions.push(transaction);
+            block.file.fileSize = getFilesizeInBytes(`${config.TEMP_DIR}/${filename}.enc`);
             logger.info('Upload complete');
-            enc.encodeFile(filename,transaction.extension,block);
+            enc.encodeFile(filename, transaction.extension, block);
         });
 
     });
@@ -114,6 +117,102 @@ app.post('/decrypt', function (req, res) {
     });
     return req.pipe(busboy);
 
+});
+
+// handle upload of a fragment
+app.post('/upload/:filename', function (req, res) {
+    let filename = path.basename(req.params.filename);
+    //filename = path.resolve(__dirname, filename);
+    let dst = fs.createWriteStream(__dirname + '/../files/' + filename);
+    req.pipe(dst);
+    dst.on('drain', function () {
+        // console.log('drain', new Date());
+        req.resume();
+    });
+    req.on('end', function () {
+        res.send(200);
+    });
+});
+
+app.post('/download/:filename', function (req, res) {
+    let filename = path.basename(req.params.filename);
+    let dst = fs.createWriteStream(__dirname + '/../tmp/' + filename);
+    req.pipe(dst);
+    dst.on('drain', function () {
+        req.resume();
+    });
+    req.on('end', function () {
+        res.send();
+    });
+});
+
+app.post('/downloading/:location/:filename', function (req, res) {
+    let filename = path.basename(req.params.filename);
+    let location = path.basename(req.params.location);
+    download(location, filename).then((msg) => {
+        res.send();
+    });
+});
+
+app.get('/files', (req, res) => {
+    let c = fragchain.getChain();
+    let d = c.map(x => x);
+    res.json({
+        blocks: d
+    });
+});
+
+app.get('/file/:index', (req, res) => {
+    let blockIndex = req.params.index;
+    console.log(blockIndex);
+    fragchain.find(blockIndex).then(block => {
+        res.json(block);
+    });
+});
+
+app.get('/download/file/:index', (req, res) => {
+    if(req.method === 'HEAD'){
+        res.send();
+    }
+    if(req.method === 'GET'){
+        try {
+            fragchain.find(req.params.index).then(block => {
+                let frags = block.transactions[0].frags.map(frag => {
+                    return {
+                        name: frag.fragLocation,
+                        type: frag.index
+                    }
+                });
+                frags.pop();
+                frags.pop();
+
+                logger.warn(frags);
+                let size = block.file.fileSize;
+                let filename = block.file.fileName;
+                enc.preDecode(frags,size,'tmp/'+filename).then(()=>{
+                    let decFilePath = __dirname + '/../tmp/' + filename;
+                    logger.info(decFilePath);
+                    let handle = null;
+                    const deCipher = crypto.createDecipher('aes-256-cbc', 'mysecretkey');
+                    try {
+                        res.setHeader('content-type', 'application/octet-stream');
+                        handle = fs.createReadStream(decFilePath).pipe(res);
+                        handle.on('finish', () => {
+                            res.end();
+                            // res.download(`${config.TEMP_DIR}/${filename}`, filename)
+                        });
+                    } catch (e) {
+                        logger.error(e)
+                    }
+                }).catch(e=> {
+                    logger.warn(e.toString());
+                    res.end();
+                });
+            }).catch(e => {logger.warn(e.toString()); res.end()});
+        } catch (e) {
+            logger.warn(e.toString());
+        }
+    }
 });
 
 const checkExtension = (filename) => {
@@ -150,14 +249,15 @@ const checkOriginalExtension = (filename) => {
     }
 };
 
+const getFilesizeInBytes = (path) => {
+    let stats = fs.statSync(path);
+    return stats["size"];
+};
+
 const startWebServer = () => {
-    app.listen(3000, () => {
+    app.listen(4000, () => {
         logger.info('App listening on port 3000');
     });
 };
 
-const setBlockchainRef = (blockchain)=>{
-    enc.setBlockchainRef(blockchain);
-};
-
-module.exports = {startWebServer, setBlockchainRef};
+module.exports = {startWebServer};

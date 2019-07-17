@@ -56,6 +56,7 @@ const Block = {
         merkleRoot: 'string',
         timestamp: 'date',
         blockHash: {type: 'string', indexed: true},
+        key: 'string'
     }
 };
 

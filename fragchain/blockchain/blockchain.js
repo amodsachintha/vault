@@ -48,7 +48,8 @@ const generateGenesisBlock = () => {
         }],
         timestamp: new Date(),
         merkleRoot: '0000000000000000000000000000000000000000000000000000000000000000',
-        blockHash: '0000000000000000000000000000000000000000000000000000000000000000'
+        blockHash: '0000000000000000000000000000000000000000000000000000000000000000',
+        key: '0000000000000'
     };
     // GENESIS should be the same on all nodes
     // block.blockHash = generateBlockHash(block);
@@ -68,7 +69,7 @@ const generateGenesisBlock = () => {
 const storeBlock = (owner, file, transactions) => {
     // previous block is the latest block
     const prevBlock = getLatestBlock();
-    const txs = transactions.map(tx=> createTransaction(tx.frags,tx.index,tx.encFragCount,tx.fragHash,tx.encFragHash,tx.rsConfig))
+    const txs = transactions.map(tx => createTransaction(tx.frags, tx.index, tx.encFragCount, tx.fragHash, tx.encFragHash, tx.rsConfig));
     const block = {
         index: prevBlock.index + 1,
         previousHash: prevBlock.blockHash,
@@ -77,7 +78,8 @@ const storeBlock = (owner, file, transactions) => {
         transactions: txs,
         timestamp: new Date(),
         merkleRoot: generateTransactionMerkleRoot(txs),
-        blockHash: null
+        blockHash: null,
+        key: 'mysecretkey',
     };
     block.blockHash = generateBlockHash(block);
     return new Promise((resolve, reject) => {
@@ -164,7 +166,7 @@ const generateRSFragmentHash = (fragment) => {
 
 /* Creates a single Transaction Object from redundant fragment data */
 const createTransaction = (fragments, index, encFragCount, fragHash, encFragHash, rsConfig) => {
-    let frgs = fragments.map(fr => createRSFragment(fr.index,fr.RSfragCount,fr.fragHash,fr.fragLocation));
+    let frgs = fragments.map(fr => createRSFragment(fr.index, fr.RSfragCount, fr.fragHash, fr.fragLocation));
     const transaction = {
         index: index,
         encFragCount: encFragCount,
@@ -349,6 +351,13 @@ const replaceChain = (newChain) => {
     });
 };
 
+const findBlockByIndex = (index) => {
+    return new Promise(resolve => {
+        let localChain = realm.objects('Block');
+        let filtered = localChain.filtered('index = "' + index + '"');
+        resolve(filtered[0]);
+    });
+};
 
 /* Good old exports */
 module.exports = {
@@ -363,5 +372,6 @@ module.exports = {
     createRSFragment,
     getLocalChainVersion,
     storeBlockFromRemote,
-    replaceChain
+    replaceChain,
+    findBlockByIndex
 };

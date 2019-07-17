@@ -10,7 +10,7 @@ else if(ip.address() === '172.16.0.20')
 else if(ip.address() === '172.16.0.30')
     path='./../../db/30/vault.realm';
 else if(ip.address() === '172.16.0.40')
-    path='../../db/40/vault.realm';
+    path='./../../db/40/vault.realm';
 
 const realm = new Realm({
     path: __dirname + path,

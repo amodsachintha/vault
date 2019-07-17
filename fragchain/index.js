@@ -21,12 +21,12 @@ const store = (owner, file, transactions) => {
     })
 };
 
-const find = () => {
-
+const find = (index) => {
+    return blockchain.findBlockByIndex(index).then(block => block);
 };
 
 const getChain = () => {
-
+    return blockchain.getChain();
 };
 
 module.exports = {

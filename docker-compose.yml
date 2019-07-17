@@ -8,7 +8,7 @@ services:
       vault:
         ipv4_address: 172.16.0.10
     ports:
-      - "3000"
+      - "4000"
       - "4444"
     volumes:
       - ~/github/vault:/vault
@@ -21,7 +21,33 @@ services:
       vault:
         ipv4_address: 172.16.0.20
     ports:
-      - "3000"
+      - "4000"
+      - "4444"
+    volumes:
+      - ~/github/vault:/vault
+
+  node-3:
+    container_name: node-3
+    image: fragchain:latest
+    entrypoint: "./vault/entrypoint.sh"
+    networks:
+      vault:
+        ipv4_address: 172.16.0.30
+    ports:
+      - "4000"
+      - "4444"
+    volumes:
+      - ~/github/vault:/vault
+
+  node-4:
+    container_name: node-4
+    image: fragchain:latest
+    entrypoint: "./vault/entrypoint.sh"
+    networks:
+      vault:
+        ipv4_address: 172.16.0.40
+    ports:
+      - "4000"
       - "4444"
     volumes:
       - ~/github/vault:/vault

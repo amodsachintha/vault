@@ -2,6 +2,7 @@
 const PrimeField = require('rye').PrimeField;
 const field = new PrimeField(257);
 const fs = require("fs");
+const logger = require('../../logger').getLogger('redundancy-decode');
 
 let mainBuffSize, subBuffSize, shardCount = 4, filenames , decodedFile;
 
@@ -33,11 +34,14 @@ const decode = () => {
 
         for (let i = 1; i <= shardCount; i++) {
             if ( checkFile (i) ) {
+
                 if ( i === shardCount) {
                     let end = mainBuffSize - ((shardCount - 1) * subBuffSize);
                     data.push(fs.readFileSync(getFileName(i)).slice(0, end));
+                    console.log('done q' + i)
                 } else {
                     data.push(fs.readFileSync(getFileName(i)));
+                    console.log('done g' + i)
                 }
             } else {
                 data.push(generateShard(i));
@@ -45,23 +49,20 @@ const decode = () => {
         }
 
         try {
-            fs.writeFile(decodedFile, Buffer.concat(data), function (err) {
-                if (err) throw err;
-                console.log('File decoded successfully.');
-                    try {
-                        fs.unlinkSync(filenames[0].name);
-                    } catch(err) {console.error(err)}
-                    try {
-                        fs.unlinkSync(filenames[1].name);
-                    } catch(err) {console.error(err)}
-                    try {
-                        fs.unlinkSync(filenames[2].name);
-                    } catch(err) {console.error(err)}
-                    try {
-                        fs.unlinkSync(filenames[3].name);
-                    } catch(err) {console.error(err)}
-
-            });
+            fs.writeFileSync(decodedFile, Buffer.concat(data))
+                logger.info('File decoded successfully.');
+                    // try {
+                    //     fs.unlinkSync(filenames[0].name);
+                    // } catch(err) {console.error(err)}
+                    // try {
+                    //     fs.unlinkSync(filenames[1].name);
+                    // } catch(err) {console.error(err)}
+                    // try {
+                    //     fs.unlinkSync(filenames[2].name);
+                    // } catch(err) {console.error(err)}
+                    // try {
+                    //     fs.unlinkSync(filenames[3].name);
+                    // } catch(err) {console.error(err)}
         } catch (e) {
             console.log('Error:', e.stack);
         }
@@ -72,11 +73,11 @@ const decode = () => {
 
     const checkAvailability = (name) => {
         return fs.existsSync(name);
-    }
+    };
 
     const getFileCount = () => {
         return filenames.length;
-    }
+    };
 
     const checkFile = (type) => {
         for (let i = 0; i < filenames.length; i++) {
