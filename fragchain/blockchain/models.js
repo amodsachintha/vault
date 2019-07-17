@@ -16,7 +16,10 @@ const File = {
     properties: {
         fileName: 'string',
         fileSize: 'int',
+        mimeType: 'string',
+        extension: 'string',
         fileHash: 'string',
+
     }
 };
 

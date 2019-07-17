@@ -34,37 +34,33 @@ const decode = () => {
 
         for (let i = 1; i <= shardCount; i++) {
             if ( checkFile (i) ) {
-
                 if ( i === shardCount) {
                     let end = mainBuffSize - ((shardCount - 1) * subBuffSize);
                     data.push(fs.readFileSync(getFileName(i)).slice(0, end));
-                    console.log('done q' + i)
                 } else {
                     data.push(fs.readFileSync(getFileName(i)));
-                    console.log('done g' + i)
                 }
             } else {
                 data.push(generateShard(i));
             }
         }
-
         try {
-            fs.writeFileSync(decodedFile, Buffer.concat(data))
+            fs.writeFileSync(decodedFile, Buffer.concat(data));
                 logger.info('File decoded successfully.');
-                    // try {
-                    //     fs.unlinkSync(filenames[0].name);
-                    // } catch(err) {console.error(err)}
-                    // try {
-                    //     fs.unlinkSync(filenames[1].name);
-                    // } catch(err) {console.error(err)}
-                    // try {
-                    //     fs.unlinkSync(filenames[2].name);
-                    // } catch(err) {console.error(err)}
-                    // try {
-                    //     fs.unlinkSync(filenames[3].name);
-                    // } catch(err) {console.error(err)}
+                    try {
+                        fs.unlinkSync(filenames[0].name);
+                    } catch(err) {console.error(err)}
+                    try {
+                        fs.unlinkSync(filenames[1].name);
+                    } catch(err) {console.error(err)}
+                    try {
+                        fs.unlinkSync(filenames[2].name);
+                    } catch(err) {console.error(err)}
+                    try {
+                        fs.unlinkSync(filenames[3].name);
+                    } catch(err) {console.error(err)}
         } catch (e) {
-            console.log('Error:', e.stack);
+            logger.warn('Error:', e.stack);
         }
     } else {
         console.log('Wait until all the files are available ');
@@ -87,7 +83,7 @@ const decode = () => {
             }
         }
         return false;
-    }
+    };
 
     const getFileName = (type) => {
         for (let i = 0; i < filenames.length; i++) {
@@ -97,7 +93,7 @@ const decode = () => {
             }
         }
         return null;
-    }
+    };
 
     const getDataCount = () => {
         let count = 0;
@@ -108,7 +104,7 @@ const decode = () => {
         }
 
         return count;
-    }
+    };
 
     const generateShard= (position) => {
         if (shardCount === 4) {
@@ -121,7 +117,7 @@ const decode = () => {
                 return generateModeOne(position);
             }
         }
-    }
+    };
 
     const generateModeOne = (position) => {
         let buff1 = Buffer.allocUnsafe(subBuffSize);
@@ -459,7 +455,7 @@ const decode = () => {
 
             return tempBuff;
         }
-    }
+    };
 
     module.exports = {
         start

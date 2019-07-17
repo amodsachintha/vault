@@ -137,9 +137,9 @@ const encode = () => {
         let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + filename )+'6', 6);
         return Promise.all([p1, p2, p3, p4, p5, p6]).then((arr) => {
             block.transactions[0].frags = arr;
-            // try {
-            //     fs.unlinkSync(filename + extension);
-            // } catch(err) {console.error(err)}
+            try {
+                fs.unlinkSync(filename + extension);
+            } catch(err) {console.error(err)}
             return block;
         }).catch(er => {
             logger.error(er);

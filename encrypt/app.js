@@ -12,6 +12,7 @@ const config = require('../config');
 const download = require('../distribute/download').download;
 const fragchain = require('../fragchain/index');
 const cors = require('cors');
+const mimecheck = require('mime');
 let chain = null;
 
 app.use(cors());
@@ -36,6 +37,8 @@ app.post('/encrypt', function (req, res) {
         file: {
             fileName: '',
             fileSize: 0,
+            mimeType: '',
+            extension: '',
             fileHash: ''
         },
         key: 'mysecretkey',
@@ -46,7 +49,10 @@ app.post('/encrypt', function (req, res) {
     busboy.on('file', function (fieldname, file, filename, encoding, mimetype) {
         logger.info(`Uploading: ${filename} mime: ${mimetype}`);
         block.file.fileName = filename;
-        block.file.fileHash = '0000000000000000000000000000000000000000000000000000000000000000';
+        block.file.fileHash = '';
+        console.log(mimetype);
+        block.file.mimeType = mimetype;
+        block.file.extension = mimecheck.getExtension(mimetype);
         let transaction = {
             index: 1,
             encFragCount: 1,
@@ -59,26 +65,26 @@ app.post('/encrypt', function (req, res) {
         };
         let handle = null;
 
-        handle = file.pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-
-        // if (checkExtension(filename)) {
-        //     // encrypt only
-        //     const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-        //     try {
-        //         handle = file.pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-        //     } catch (e) {
-        //         logger.error(e)
-        //     }
-        // } else {
-        //     // zip and encrypt
-        //     const zip = zlib.createGzip();
-        //     const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-        //     try {
-        //         handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-        //     } catch (e) {
-        //         logger.error(e)
-        //     }
-        // }
+        if (checkExtension(block.file.extension)) {
+            // encrypt only
+            logger.info('Encrypting...');
+            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
+            try {
+                handle = file.pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
+            } catch (e) {
+                logger.error(e)
+            }
+        } else {
+            // zip and encrypt
+            logger.info('Gzippping and Encrypting...');
+            const zip = zlib.createGzip();
+            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
+            try {
+                handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
+            } catch (e) {
+                logger.error(e)
+            }
+        }
 
         handle.on('finish', () => {
             logger.warn('Handle Finish');
@@ -94,29 +100,6 @@ app.post('/encrypt', function (req, res) {
         res.send('done');
     });
     req.pipe(busboy);
-});
-
-app.post('/decrypt', function (req, res) {
-    const busboy = new Busboy({headers: req.headers});
-    busboy.on('file', function (fieldname, file, filename, encoding, mimetype) {
-        console.log('Uploading: ');
-        console.log(mimetype);
-
-        if (checkOriginalExtension(filename)) {
-            const decipher = crypto.createDecipher('aes-256-cbc', 'mysecretkey');
-            file.pipe(decipher).pipe(fs.createWriteStream('./temp/' + filename.split('.').slice(0, -1).join('.')));
-        } else {
-            const unzip = zlib.createUnzip();
-            const decipher = crypto.createDecipher('aes-256-cbc', 'mysecretkey');
-            file.pipe(decipher).pipe(unzip).pipe(fs.createWriteStream('./temp/' + filename.split('.').slice(0, -1).join('.')));
-        }
-    });
-    busboy.on('finish', function () {
-        console.log('Upload complete');
-        res.send('done');
-    });
-    return req.pipe(busboy);
-
 });
 
 // handle upload of a fragment
@@ -146,17 +129,16 @@ app.post('/download/:filename', function (req, res) {
     });
 });
 
-app.post('/downloading/:location/:filename', function (req, res) {
+app.post('/downloading/:filename', function (req, res) {
     let filename = path.basename(req.params.filename);
-    let location = path.basename(req.params.location);
-    download(location, filename).then((msg) => {
-        res.send();
-    });
+    let rs = fs.createReadStream(__dirname + '/../files/'+filename);
+    rs.pipe(res);
 });
 
 app.get('/files', (req, res) => {
     let c = fragchain.getChain();
     let d = c.map(x => x);
+    d.pop();
     res.json({
         blocks: d
     });
@@ -188,6 +170,7 @@ app.get('/download/file/:index', (req, res) => {
 
                 logger.warn(frags);
                 let size = block.file.fileSize;
+
                 let filename = block.file.fileName;
                 enc.preDecode(frags,size,'tmp/'+filename).then(()=>{
                     let decFilePath = __dirname + '/../tmp/' + filename;
@@ -196,10 +179,22 @@ app.get('/download/file/:index', (req, res) => {
                     const deCipher = crypto.createDecipher('aes-256-cbc', 'mysecretkey');
                     try {
                         res.setHeader('content-type', 'application/octet-stream');
-                        handle = fs.createReadStream(decFilePath).pipe(res);
+
+                        if(checkExtension(block.file.extension)){
+                            // no unzip
+                            handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(res);
+                        }else{
+                            // should unzip
+                            const unzip = zlib.createUnzip();
+                            handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(unzip).pipe(res);
+                        }
                         handle.on('finish', () => {
+                            try {
+                                fs.unlinkSync(decFilePath);
+                            }catch (e) {
+                               logger.warn(e.toString())
+                            }
                             res.end();
-                            // res.download(`${config.TEMP_DIR}/${filename}`, filename)
                         });
                     } catch (e) {
                         logger.error(e)
@@ -215,34 +210,19 @@ app.get('/download/file/:index', (req, res) => {
     }
 });
 
-const checkExtension = (filename) => {
-    switch (path.extname(filename)) {
-        case '.zip':
+const checkExtension = (extension) => {
+    switch (extension) {
+        case 'zip':
             return true;
-        case '.rar':
+        case 'rar':
             return true;
-        case '.7z':
+        case '7z':
             return true;
-        case '.gzip':
+        case 'tgz':
             return true;
-        case '.mp4':
+        case 'gzip':
             return true;
-        default:
-            return false;
-    }
-};
-
-const checkOriginalExtension = (filename) => {
-    switch (filename.split('.').slice(-2, -1)) {
-        case '.zip':
-            return true;
-        case '.rar':
-            return true;
-        case '.7z':
-            return true;
-        case '.gzip':
-            return true;
-        case '.mp4':
+        case 'mp4':
             return true;
         default:
             return false;

@@ -28,6 +28,8 @@ const generateGenesisBlock = () => {
         file: {
             fileName: 'vault.genesis',
             fileSize: 0,
+            mimeType: '',
+            extension: '',
             fileHash: '0000000000000000000000000000000000000000000000000000000000000000'
         },
         transactions: [{

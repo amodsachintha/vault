@@ -8,6 +8,7 @@ const upload = require('../distribute/upload.js').upload;
 const config = require('../config');
 const fs = require('fs');
 const request = require('request');
+const axios = require('axios');
 const path = require('path');
 
 let frags = [];
@@ -24,14 +25,14 @@ const encodeFile = (fname, ext, blk) => {
             asyncsLeft++;
             upload(`${ips[i % 4]}`, config.TEMP_DIR + '/' + bl.transactions[0].frags[i].fragLocation).then((msg) => {
                 try {
-                    // fs.unlinkSync(config.TEMP_DIR + '/' + bl.transactions[0].frags[i].fragLocation)
+                    fs.unlinkSync(config.TEMP_DIR + '/' + bl.transactions[0].frags[i].fragLocation)
                     // file removed
                 } catch (err) {
                     console.error(err)
                 }
                 bl.transactions[0].frags[i].fragLocation = ips[i % 4] + '/' + bl.transactions[0].frags[i].fragLocation;
                 asyncsLeft--;
-                if(asyncsLeft === 0 ){
+                if (asyncsLeft === 0) {
                     blockchainRef.store(bl.owner, bl.file, bl.transactions);
                 }
             });
@@ -52,12 +53,12 @@ const preDecode = (frag, len, name) => {
             frags[1].name = config.TEMP_DIR + '/' + frags[1].name.split("/")[1];
             frags[2].name = config.TEMP_DIR + '/' + frags[2].name.split("/")[1];
             frags[3].name = config.TEMP_DIR + '/' + frags[3].name.split("/")[1];
-            decodeFile().then(()=>{
+
+            decodeFile().then(() => {
                 resolve()
-            }).catch(e=>{
+            }).catch(e => {
                 reject(e)
             });
-
         });
     });
 };
@@ -67,13 +68,22 @@ const download = () => {
         let asyncsLeft = 0;
         for (let i = 0; i < frags.length; i++) {
             asyncsLeft++;
-            request.post('http://' + frags[i].name.split("/")[0] + ':4000/downloading/' + '172.16.0.10/' + path.basename(frags[i].name.split("/")[1]))
-                .on('response', function (response) {
+            let url = 'http://' + frags[i].name.split("/")[0] + ':4000/downloading/' + path.basename(frags[i].name.split("/")[1]);
+            axios({
+                method: 'POST',
+                url: url,
+                responseType: 'stream'
+            }).then(resp => {
+                let handle = resp.data.pipe(fs.createWriteStream(__dirname + '/../tmp/' + frags[i].name.split("/")[1]));
+                handle.on('finish', () => {
                     asyncsLeft--;
-                    if(asyncsLeft === 0){
+                    if (asyncsLeft === 0) {
                         resolve();
                     }
-                })
+                });
+            }).catch(e => {
+                logger.warn(e);
+            });
         }
     });
 
