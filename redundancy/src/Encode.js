@@ -8,17 +8,17 @@ const config = require('../../config');
 const getHash = require("./HashCheck").getHash;
 const getStringHash = require("./HashCheck").getStringHash;
 
-let mainBuff, mainBuffSize, subBuffSize, shardCount = 4, block, filename, extension;
+let mainBuff, mainBuffSize, subBuffSize, shardCount = 4, block, filename;
 
-const start = (fname, ext, blk) => {
+const start = (fname, blk, idx) => {
     filename = `${config.TEMP_DIR}/${fname}`;
+
     block = blk;
     logger.warn(filename);
-    extension = ext;
     return new Promise((resolve, reject) => {
-        if (validateInput(filename, extension) === 1) {
-            init(fname, ext, blk);
-            let bl = encode();
+        if (validateInput(filename) === 1) {
+            init();
+            let bl = encode(idx,filename);
             bl.then((blb) => {
                 resolve(blb)
             });
@@ -29,7 +29,7 @@ const start = (fname, ext, blk) => {
 };
 
 const init = () => {
-    mainBuff = fs.readFileSync(filename + extension);
+    mainBuff = fs.readFileSync(filename);
     mainBuffSize = mainBuff.length;
 
     subBuffSize = 0;
@@ -40,23 +40,23 @@ const init = () => {
     }
 };
 
-const validateInput = (filename, extension) => {
+const validateInput = (filename) => {
     logger.debug(filename);
-    if (filename && extension) {
-        if (fs.existsSync(filename + extension)) {
+    if (filename) {
+        if (fs.existsSync(filename)) {
             return 1;
         } else {
             logger.error('File cannot be found !!');
             return 0;
         }
     } else {
-        logger.error('Invalid file name or extension');
+        logger.error('Invalid file name');
         return 0;
     }
 };
 
 
-const encode = () => {
+const encode = (idx,f) => {
     if (shardCount === 4) {
         let shard1 = mainBuff.slice(0, subBuffSize);
         let shard2 = mainBuff.slice(subBuffSize, subBuffSize * 2);
@@ -129,20 +129,26 @@ const encode = () => {
             }
         }
 
-        let p1 = createShard(shard1, getStringHash(block.owner.uuid + '.1' + Date.now() + filename )+'1', 1);
-        let p2 = createShard(shard2, getStringHash(block.owner.uuid + '.2' + Date.now() + filename )+'2', 2);
-        let p3 = createShard(shard3, getStringHash(block.owner.uuid + '.3' + Date.now() + filename )+'3', 3);
-        let p4 = createShard(shard4, getStringHash(block.owner.uuid + '.4' + Date.now() + filename )+'4', 4);
-        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), getStringHash(block.owner.uuid + '.5' + Date.now() + filename )+'5', 5);
-        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + filename )+'6', 6);
+        let p1 = createShard(shard1, getStringHash(block.owner.uuid + '.1' + Date.now() + filename) + '1', 1);
+        let p2 = createShard(shard2, getStringHash(block.owner.uuid + '.2' + Date.now() + filename) + '2', 2);
+        let p3 = createShard(shard3, getStringHash(block.owner.uuid + '.3' + Date.now() + filename) + '3', 3);
+        let p4 = createShard(shard4, getStringHash(block.owner.uuid + '.4' + Date.now() + filename) + '4', 4);
+        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), getStringHash(block.owner.uuid + '.5' + Date.now() + filename) + '5', 5);
+        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + filename) + '6', 6);
+
         return Promise.all([p1, p2, p3, p4, p5, p6]).then((arr) => {
-            block.transactions[0].frags = arr;
+            console.log(idx);
+            block.transactions[idx].frags = arr;
             try {
-                fs.unlinkSync(filename + extension);
-            } catch(err) {console.error(err)}
+                console.log('rrrr file :::'+filename)
+                console.log('rrrr f :::'+f)
+                fs.unlinkSync(f)
+            }catch (e) {
+                logger.debug(e);
+            }
             return block;
         }).catch(er => {
-            logger.error(er);
+            logger.error('EEEEEEEEE '+er);
         })
     }
 };
@@ -171,14 +177,14 @@ const generateLastShard = (shard) => {
 const createShard = (shard, name, count) => {
     return new Promise((resolve, reject) => {
         try {
-            fs.writeFile(config.TEMP_DIR+'/'+name, shard, function (err) {
+            fs.writeFile(config.TEMP_DIR + '/' + name, shard, function (err) {
                 if (err) {
                     reject(err)
                 }
                 let frag = {
                     index: count,
                     RSfragCount: 6,
-                    fragHash: getHash(config.TEMP_DIR+'/'+name),
+                    fragHash: getHash(config.TEMP_DIR + '/' + name),
                     fragLocation: name
                 };
                 resolve(frag)

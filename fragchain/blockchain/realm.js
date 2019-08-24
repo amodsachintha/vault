@@ -11,9 +11,14 @@ else if(ip.address() === '172.16.0.30')
     path='./../../db/30/vault.realm';
 else if(ip.address() === '172.16.0.40')
     path='./../../db/40/vault.realm';
+else if(ip.address() === '172.16.0.50')
+    path='./../../db/50/vault.realm';
+else if(ip.address() === '172.16.0.60')
+    path='./../../db/60/vault.realm';
 
 const realm = new Realm({
     path: __dirname + path,
+    inMemory: false,
     schema: [
         models.Block,
         models.File,

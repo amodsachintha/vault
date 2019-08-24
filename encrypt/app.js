@@ -13,6 +13,7 @@ const download = require('../distribute/download').download;
 const fragchain = require('../fragchain/index');
 const cors = require('cors');
 const mimecheck = require('mime');
+const splitfile = require('split-file');
 let chain = null;
 
 app.use(cors());
@@ -27,7 +28,7 @@ app.post('/encrypt', function (req, res) {
     const block = {
         owner: {
             uuid: '000000-00000000-00000000',
-            name: 'Vault Genesis Block',
+            name: 'amodsachintha',
             username: 'vault',
             privateKey: 'vault.genesis',
             publicKey: 'vault.genesis',
@@ -53,16 +54,6 @@ app.post('/encrypt', function (req, res) {
         console.log(mimetype);
         block.file.mimeType = mimetype;
         block.file.extension = mimecheck.getExtension(mimetype);
-        let transaction = {
-            index: 1,
-            encFragCount: 1,
-            fragHash: '0000000000000000000000000000000000000000000000000000000000000000',
-            encFragHash: null,
-            frags: [],
-            rsConfig: '4+2',
-            name: filename,
-            extension: '.enc',
-        };
         let handle = null;
 
         if (checkExtension(block.file.extension)) {
@@ -88,11 +79,43 @@ app.post('/encrypt', function (req, res) {
 
         handle.on('finish', () => {
             logger.warn('Handle Finish');
-            transaction.encFragHash = md5File.sync(`${config.TEMP_DIR}/${filename}.enc`);
-            block.transactions.push(transaction);
-            block.file.fileSize = getFilesizeInBytes(`${config.TEMP_DIR}/${filename}.enc`);
-            logger.info('Upload complete');
-            enc.encodeFile(filename, transaction.extension, block);
+            logger.info('Starting Transaction Split');
+            splitfile.splitFileBySize(`${config.TEMP_DIR}/${filename}.enc`, config.TRANSACTION_SPLIT_SIZE).then(names => {
+                logger.info('Transaction Split Complete: Parts - ' + names.length);
+                let i = 0;
+                names.forEach(filename => {
+                    let hash = md5File.sync(filename);
+                    block.transactions.push({
+                        index: i++,
+                        encFragCount: names.length,
+                        fragHash: hash,
+                        encFragHash: hash,
+                        frags: [],
+                        rsConfig: '4+2',
+                        name: path.basename(filename),
+                        extension: '.enc',
+                    });
+                });
+
+                block.file.fileSize = getFilesizeInBytes(`${config.TEMP_DIR}/${filename}.enc`);
+                try {
+                    fs.unlinkSync(`${config.TEMP_DIR}/${filename}.enc`)
+                } catch (e) {
+                    logger.error(e);
+                }
+                logger.info('Starting Encode');
+                let j = 0;
+
+                let promiseArray = [];
+                names.forEach(f => {
+                    promiseArray.push(enc.encodeFile(path.basename(f), block , j++));
+                });
+                Promise.all(promiseArray).then(txes => {
+                    fragchain.store(block.owner, block.file, txes);
+                })
+            }).catch(err => {
+                logger.error(err);
+            });
         });
 
     });
@@ -131,7 +154,7 @@ app.post('/download/:filename', function (req, res) {
 
 app.post('/downloading/:filename', function (req, res) {
     let filename = path.basename(req.params.filename);
-    let rs = fs.createReadStream(__dirname + '/../files/'+filename);
+    let rs = fs.createReadStream(__dirname + '/../files/' + filename);
     rs.pipe(res);
 });
 
@@ -146,17 +169,23 @@ app.get('/files', (req, res) => {
 
 app.get('/file/:index', (req, res) => {
     let blockIndex = req.params.index;
-    console.log(blockIndex);
+
     fragchain.find(blockIndex).then(block => {
+        logger.info({
+            file_id: block.fileId,
+            state: block.state,
+            version: block.version,
+            filename: block.file.fileName
+        });
         res.json(block);
     });
 });
 
 app.get('/download/file/:index', (req, res) => {
-    if(req.method === 'HEAD'){
+    if (req.method === 'HEAD') {
         res.send();
     }
-    if(req.method === 'GET'){
+    if (req.method === 'GET') {
         try {
             fragchain.find(req.params.index).then(block => {
                 let frags = block.transactions[0].frags.map(frag => {
@@ -172,7 +201,7 @@ app.get('/download/file/:index', (req, res) => {
                 let size = block.file.fileSize;
 
                 let filename = block.file.fileName;
-                enc.preDecode(frags,size,'tmp/'+filename).then(()=>{
+                enc.preDecode(frags, size, 'tmp/' + filename).then(() => {
                     let decFilePath = __dirname + '/../tmp/' + filename;
                     logger.info(decFilePath);
                     let handle = null;
@@ -180,10 +209,10 @@ app.get('/download/file/:index', (req, res) => {
                     try {
                         res.setHeader('content-type', 'application/octet-stream');
 
-                        if(checkExtension(block.file.extension)){
+                        if (checkExtension(block.file.extension)) {
                             // no unzip
                             handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(res);
-                        }else{
+                        } else {
                             // should unzip
                             const unzip = zlib.createUnzip();
                             handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(unzip).pipe(res);
@@ -191,19 +220,22 @@ app.get('/download/file/:index', (req, res) => {
                         handle.on('finish', () => {
                             try {
                                 fs.unlinkSync(decFilePath);
-                            }catch (e) {
-                               logger.warn(e.toString())
+                            } catch (e) {
+                                logger.warn(e.toString())
                             }
                             res.end();
                         });
                     } catch (e) {
                         logger.error(e)
                     }
-                }).catch(e=> {
+                }).catch(e => {
                     logger.warn(e.toString());
                     res.end();
                 });
-            }).catch(e => {logger.warn(e.toString()); res.end()});
+            }).catch(e => {
+                logger.warn(e.toString());
+                res.end()
+            });
         } catch (e) {
             logger.warn(e.toString());
         }

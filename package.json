@@ -25,6 +25,8 @@
     "rye": "0.0.3",
     "socket.io": "^2.2.0",
     "socket.io-client": "^2.2.0",
+    "split-file": "^2.1.1",
+    "uuid": "^3.3.2",
     "winston": "^3.2.1",
     "zlib": "^1.0.5"
   }

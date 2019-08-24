@@ -2,7 +2,7 @@ version: '3.7'
 services:
   node-1:
     container_name: node-1
-    image: fragchain:latest
+    image: vault-runtime:latest
     entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
@@ -15,7 +15,7 @@ services:
 
   node-2:
     container_name: node-2
-    image: fragchain:latest
+    image: vault-runtime:latest
     entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
@@ -28,7 +28,7 @@ services:
 
   node-3:
     container_name: node-3
-    image: fragchain:latest
+    image: vault-runtime:latest
     entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
@@ -41,7 +41,7 @@ services:
 
   node-4:
     container_name: node-4
-    image: fragchain:latest
+    image: vault-runtime:latest
     entrypoint: "./vault/entrypoint.sh"
     networks:
       vault:
@@ -51,6 +51,32 @@ services:
       - "4444"
     volumes:
       - ~/github/vault:/vault
+
+#  node-5:
+#    container_name: node-5
+#    image: vault-runtime:latest
+#    entrypoint: "./vault/entrypoint.sh"
+#    networks:
+#      vault:
+#        ipv4_address: 172.16.0.50
+#    ports:
+#      - "4000"
+#      - "4444"
+#    volumes:
+#      - ~/github/vault:/vault
+#
+#  node-6:
+#    container_name: node-6
+#    image: vault-runtime:latest
+#    entrypoint: "./vault/entrypoint.sh"
+#    networks:
+#      vault:
+#        ipv4_address: 172.16.0.60
+#    ports:
+#      - "4000"
+#      - "4444"
+#    volumes:
+#      - ~/github/vault:/vault
 
 networks:
   vault:

@@ -52,6 +52,10 @@ const Block = {
     name: 'Block',
     properties: {
         index: {type: 'int', indexed: true},
+        fileId: {type: 'string', indexed: true},
+        state: {type: 'string', default: 'STORED'},
+        version: {type: 'int', default: 1},
+        sharedWith: 'string[]',
         previousHash: 'string',
         owner: {type: 'Owner'},
         file: {type: 'File'},

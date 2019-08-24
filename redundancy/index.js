@@ -14,30 +14,32 @@ const path = require('path');
 let frags = [];
 let size = 0;
 let decoded = null;
-const ips = ['172.16.0.10', '172.16.0.20', '172.16.0.30', '172.16.0.40'];
+const ips = ['172.16.0.10', '172.16.0.20', '172.16.0.30', '172.16.0.40', '172.16.0.40', '172.16.0.40'];
 
-const encodeFile = (fname, ext, blk) => {
-    encoder.start(fname, ext, blk).then((bl) => {
-        //logger.warn(bl.transactions.length);
-        logger.info('successfully encoded');
-        let asyncsLeft = 0;
-        for (let i = 0; i < bl.transactions[0].frags.length; i++) {
-            asyncsLeft++;
-            upload(`${ips[i % 4]}`, config.TEMP_DIR + '/' + bl.transactions[0].frags[i].fragLocation).then((msg) => {
-                try {
-                    fs.unlinkSync(config.TEMP_DIR + '/' + bl.transactions[0].frags[i].fragLocation)
-                    // file removed
-                } catch (err) {
-                    console.error(err)
-                }
-                bl.transactions[0].frags[i].fragLocation = ips[i % 4] + '/' + bl.transactions[0].frags[i].fragLocation;
-                asyncsLeft--;
-                if (asyncsLeft === 0) {
-                    blockchainRef.store(bl.owner, bl.file, bl.transactions);
-                }
-            });
-        }
-        logger.info(bl.transactions[0].frags);
+const encodeFile = (fname, blk, idx) => {
+    return encoder.start(fname, blk, idx).then((bl) => {
+        return new Promise((resolve, reject) => {
+            logger.info('successfully encoded');
+            let asyncsLeft = 0;
+            for (let j = 0; j < 6; j++) {
+                asyncsLeft++;
+                console.log(idx + '-' + j + ' test test :::' + path.basename(bl.transactions[idx].frags[j].fragLocation));
+                upload(`${ips[j % 4]}`, config.TEMP_DIR + '/' + bl.transactions[idx].frags[j].fragLocation).then((msg) => {
+                    try {
+                        fs.unlinkSync(config.TEMP_DIR + '/' + path.basename(bl.transactions[idx].frags[j].fragLocation))
+                        // file removed
+                    } catch (err) {
+                        logger.error(err)
+                    }
+                    bl.transactions[idx].frags[j].fragLocation = ips[j % 4] + '/' + bl.transactions[idx].frags[j].fragLocation;
+                    asyncsLeft--;
+                    if (asyncsLeft === 0) {
+                        resolve(bl.transactions[idx]);
+                    }
+                });
+            }
+            logger.info(bl.transactions);
+        });
     }).catch((e) => {
         logger.error(e);
     });
@@ -82,6 +84,10 @@ const download = () => {
                     }
                 });
             }).catch(e => {
+                asyncsLeft--;
+                if (asyncsLeft === 0) {
+                    resolve();
+                }
                 logger.warn(e);
             });
         }

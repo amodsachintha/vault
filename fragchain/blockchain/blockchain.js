@@ -2,6 +2,7 @@ const realm = require('./realm');
 const {MerkleTree} = require('merkletreejs');
 const SHA256 = require('crypto-js/sha256');
 const logger = require('../../logger').getLogger('blockchain');
+const uuid = require('uuid/v4');
 
 /* Initializes the blockchain. Generates the genesis block when run for the first time. */
 const initializeChain = () => {
@@ -15,39 +16,16 @@ const generateGenesisBlock = () => {
     logger.info('Generating Genesis Block!');
     const block = {
         index: 0,
+
+        fileId: uuid(),
+        state: 'GENESIS',
+        version: 1,
+        sharedWith: [],
+
         previousHash: '0000000000000000000000000000000000000000000000000000000000000000',
-        owner: {
-            uuid: '000000-00000000-00000000',
-            name: 'Vault Genesis Block',
-            username: 'vault',
-            privateKey: 'vault.genesis',
-            publicKey: 'vault.genesis',
-            masterKey: 'vault.genesis',
-            createdAt: new Date()
-        },
-        file: {
-            fileName: 'vault.genesis',
-            fileSize: 0,
-            mimeType: '',
-            extension: '',
-            fileHash: '0000000000000000000000000000000000000000000000000000000000000000'
-        },
-        transactions: [{
-            index: 1,
-            encFragCount: 2,
-            fragHash: '0000000000000000000000000000000000000000000000000000000000000000',
-            encFragHash: '0000000000000000000000000000000000000000000000000000000000000000',
-            frags: [{
-                index: 1,
-                RSfragCount: 1,
-                fileHash: '0000000000000000000000000000000000000000000000000000000000000000',
-                fragHash: '0000000000000000000000000000000000000000000000000000000000000000',
-                fragLocation: 'Mars :D',
-            }],
-            merkleRoot: '0000000000000000000000000000000000000000000000000000000000000000',
-            transactionHash: '0000000000000000000000000000000000000000000000000000000000000000',
-            rsConfig: '4+2'
-        }],
+        owner: null,
+        file: null,
+        transactions: [],
         timestamp: new Date(),
         merkleRoot: '0000000000000000000000000000000000000000000000000000000000000000',
         blockHash: '0000000000000000000000000000000000000000000000000000000000000000',
@@ -74,6 +52,12 @@ const storeBlock = (owner, file, transactions) => {
     const txs = transactions.map(tx => createTransaction(tx.frags, tx.index, tx.encFragCount, tx.fragHash, tx.encFragHash, tx.rsConfig));
     const block = {
         index: prevBlock.index + 1,
+
+        fileId: uuid(),
+        state: 'STORED',
+        version: 1,
+        sharedWith: [],
+
         previousHash: prevBlock.blockHash,
         owner: owner,
         file: file,
