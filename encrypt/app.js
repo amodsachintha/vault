@@ -314,7 +314,7 @@ app.get('/download/file/:index', (req, res) => {
 
                 Promise.all(decodePromiseArray).then(decodedFileNames => {
                     let filenamesWithPath = decodedFileNames.map(f => `${config.TEMP_DIR}/${f}`);
-                    let outfilename = `${config.TEMP_DIR}/${decodedFileNames[0].replace('.sf-part1', '')}`;
+                    let outfilename = block.file.fileName;
                     splitfile.mergeFiles(filenamesWithPath, outfilename).then(() => {
                         logger.info('Done');
                         filenamesWithPath.forEach(f => {
