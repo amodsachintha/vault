@@ -49,7 +49,7 @@ const generateGenesisBlock = () => {
 const storeBlock = (owner, file, transactions) => {
     // previous block is the latest block
     const prevBlock = getLatestBlock();
-    const txs = transactions.map(tx => createTransaction(tx.frags, tx.index, tx.encFragCount, tx.fragHash, tx.encFragHash, tx.rsConfig));
+    const txs = transactions.map(tx => createTransaction(tx.frags, tx.index, tx.encFragCount, tx.txSize, tx.fragHash, tx.encFragHash, tx.rsConfig, tx.name, tx.extension));
     const block = {
         index: prevBlock.index + 1,
 
@@ -133,10 +133,12 @@ const generateTransactionHash = (transaction) => {
     return SHA256(
         transaction.index +
         transaction.encFragCount +
+        transaction.txSize +
         transaction.encFragHash +
         transaction.fragHash +
         transaction.merkleRoot +
-        transaction.rsConfig
+        transaction.rsConfig +
+        transaction.name
     ).toString();
 };
 
@@ -151,17 +153,21 @@ const generateRSFragmentHash = (fragment) => {
 };
 
 /* Creates a single Transaction Object from redundant fragment data */
-const createTransaction = (fragments, index, encFragCount, fragHash, encFragHash, rsConfig) => {
+const createTransaction = (fragments, index, encFragCount, txSize, fragHash, encFragHash, rsConfig, name, extension) => {
     let frgs = fragments.map(fr => createRSFragment(fr.index, fr.RSfragCount, fr.fragHash, fr.fragLocation));
     const transaction = {
         index: index,
         encFragCount: encFragCount,
+        txSize: txSize,
         fragHash: fragHash,
         encFragHash: encFragHash,
         frags: frgs,
         merkleRoot: generateRSFragMerkleRoot(frgs),
         transactionHash: null,
-        rsConfig: rsConfig
+        rsConfig: rsConfig,
+        name: name,
+        extension: extension
+
     };
     transaction.transactionHash = generateTransactionHash(transaction);
     return transaction;
@@ -295,12 +301,15 @@ const replaceChain = (newChain) => {
                 return {
                     index: transaction.index,
                     encFragCount: transaction.encFragCount,
+                    txSize: transaction.txSize,
                     fragHash: transaction.fragHash,
                     encFragHash: transaction.encFragHash,
                     frags: frags,
                     merkleRoot: transaction.merkleRoot,
                     transactionHash: transaction.transactionHash,
-                    rsConfig: transaction.rsConfig
+                    rsConfig: transaction.rsConfig,
+                    name: transaction.name,
+                    extension: transaction.extension
                 }
             });
             return {
@@ -345,6 +354,25 @@ const findBlockByIndex = (index) => {
     });
 };
 
+const saveUser = user =>{
+    realm.write(() => {
+        realm.create('Owner', {...user});
+    });
+    return user;
+};
+
+const findUserByUsername = username => {
+    return realm.objects('Owner').filtered(`username = "${username}"`)[0];
+};
+
+const findUserByUUID = uuid => {
+    return realm.objects('Owner').filtered(`username = "${uuid}"`)[0];
+};
+
+const getAllUsers = () => {
+  return realm.objects('Owner')
+};
+
 /* Good old exports */
 module.exports = {
     initializeChain,
@@ -359,5 +387,9 @@ module.exports = {
     getLocalChainVersion,
     storeBlockFromRemote,
     replaceChain,
-    findBlockByIndex
+    findBlockByIndex,
+    saveUser,
+    findUserByUsername,
+    findUserByUUID,
+    getAllUsers
 };

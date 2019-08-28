@@ -3,6 +3,7 @@ const ioClient = require('socket.io-client');
 const c = require('./constants');
 const logger = require('../../logger').getLogger('messenger-client');
 let blockchainRef = undefined;
+const ipaddr = require('ip');
 
 // connections to vault servers via socket
 let sockets = [];
@@ -18,7 +19,8 @@ const bootstrap = (blockchain) => {
 };
 
 const initializeSockets = () => {
-    sockets = VAULTS.map(ip => {
+    let socketIps = VAULTS.filter(ip => ip !== ipaddr.address());
+    sockets = socketIps.map(ip => {
         let url = 'http://' + ip + ':4444';
         logger.info(`connect: ${url}/messenger`);
         const s = ioClient(url, {path: '/messenger'});

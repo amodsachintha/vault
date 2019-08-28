@@ -28,12 +28,15 @@ const Transaction = {
     properties: {
         index: 'int',
         encFragCount: 'int',
+        txSize: 'int',
         fragHash: 'string',
         encFragHash: 'string',
         frags: 'Frag[]',
         merkleRoot: 'string',
         transactionHash: 'string',
-        rsConfig: 'string'
+        rsConfig: 'string',
+        name: 'string',
+        extension: 'string'
     }
 };
 

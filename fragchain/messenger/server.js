@@ -3,6 +3,7 @@ const server = require('http').createServer();
 const io = require('socket.io')(server, {path: '/messenger', serveClient: false, cookie: false});
 const c = require('./constants');
 const logger = require('../../logger').getLogger('messenger-server');
+const ip = require('ip');
 let blockchainRef = undefined;
 // connections to vault clients via server handle.
 let clients = [];
@@ -82,6 +83,7 @@ const bootstrap = (blockchain) => {
 const broadcastMessage = (type, data) => {
     if (type === c.BROADCAST_NEW_BLOCK) {
         logger.info(`bcast: ${c.BROADCAST_NEW_BLOCK}`);
+        // clients = clients.filter(c => c.host !== ip.address());
         logger.info(`CLIENTS.LENGTH: ${clients.length}`);
         clients.forEach(client => {
             client.client.emit(c.RECV_NEW_BLOCK, data)

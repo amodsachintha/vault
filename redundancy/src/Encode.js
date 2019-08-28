@@ -18,7 +18,7 @@ const start = (fname, blk, idx) => {
     return new Promise((resolve, reject) => {
         if (validateInput(filename) === 1) {
             init();
-            let bl = encode(idx,filename);
+            let bl = encode(idx, filename);
             bl.then((blb) => {
                 resolve(blb)
             });
@@ -56,7 +56,7 @@ const validateInput = (filename) => {
 };
 
 
-const encode = (idx,f) => {
+const encode = (idx, f) => {
     if (shardCount === 4) {
         let shard1 = mainBuff.slice(0, subBuffSize);
         let shard2 = mainBuff.slice(subBuffSize, subBuffSize * 2);
@@ -140,15 +140,16 @@ const encode = (idx,f) => {
             console.log(idx);
             block.transactions[idx].frags = arr;
             try {
-                console.log('rrrr file :::'+filename)
-                console.log('rrrr f :::'+f)
+                shard1 = shard2 = shard3 = shard4 = parity1 = parity2 = null;
+                mainBuff = null;
+                additionalParity1Bits = additionalParity1Bytes = additionalParity2Bits = additionalParity2Bytes = null;
                 fs.unlinkSync(f)
-            }catch (e) {
+            } catch (e) {
                 logger.debug(e);
             }
             return block;
         }).catch(er => {
-            logger.error('EEEEEEEEE '+er);
+            logger.error('EEEEEEEEE ' + er);
         })
     }
 };
@@ -187,6 +188,7 @@ const createShard = (shard, name, count) => {
                     fragHash: getHash(config.TEMP_DIR + '/' + name),
                     fragLocation: name
                 };
+                shard = null;
                 resolve(frag)
             });
 

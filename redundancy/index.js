@@ -7,16 +7,12 @@ let blockchainRef = null;
 const upload = require('../distribute/upload.js').upload;
 const config = require('../config');
 const fs = require('fs');
-const request = require('request');
 const axios = require('axios');
 const path = require('path');
 
-let frags = [];
-let size = 0;
 let decoded = null;
-const ips = ['172.16.0.10', '172.16.0.20', '172.16.0.30', '172.16.0.40', '172.16.0.40', '172.16.0.40'];
 
-const encodeFile = (fname, blk, idx) => {
+const encodeFile = (fname, blk, idx, ips) => {
     return encoder.start(fname, blk, idx).then((bl) => {
         return new Promise((resolve, reject) => {
             logger.info('successfully encoded');
@@ -24,14 +20,15 @@ const encodeFile = (fname, blk, idx) => {
             for (let j = 0; j < 6; j++) {
                 asyncsLeft++;
                 console.log(idx + '-' + j + ' test test :::' + path.basename(bl.transactions[idx].frags[j].fragLocation));
-                upload(`${ips[j % 4]}`, config.TEMP_DIR + '/' + bl.transactions[idx].frags[j].fragLocation).then((msg) => {
+                upload(`${ips[j % ips.length]}`, config.TEMP_DIR + '/' + bl.transactions[idx].frags[j].fragLocation).then((msg) => {
                     try {
                         fs.unlinkSync(config.TEMP_DIR + '/' + path.basename(bl.transactions[idx].frags[j].fragLocation))
                         // file removed
                     } catch (err) {
-                        logger.error(err)
+                        logger.error(err);
+                        reject()
                     }
-                    bl.transactions[idx].frags[j].fragLocation = ips[j % 4] + '/' + bl.transactions[idx].frags[j].fragLocation;
+                    bl.transactions[idx].frags[j].fragLocation = ips[j % ips.length] + '/' + bl.transactions[idx].frags[j].fragLocation;
                     asyncsLeft--;
                     if (asyncsLeft === 0) {
                         resolve(bl.transactions[idx]);
@@ -45,42 +42,43 @@ const encodeFile = (fname, blk, idx) => {
     });
 };
 
-const preDecode = (frag, len, name) => {
-    size = len;
+const preDecode = (frags, size, name) => {
     decoded = name;
-    frags = frag;
     return new Promise((resolve, reject) => {
-        download().then(() => {
-            frags[0].name = config.TEMP_DIR + '/' + frags[0].name.split("/")[1];
-            frags[1].name = config.TEMP_DIR + '/' + frags[1].name.split("/")[1];
-            frags[2].name = config.TEMP_DIR + '/' + frags[2].name.split("/")[1];
-            frags[3].name = config.TEMP_DIR + '/' + frags[3].name.split("/")[1];
-
-            decodeFile().then(() => {
+        download(frags).then((fragR) => {
+            fragR[0].name = config.TEMP_DIR + '/' + path.basename(fragR[0].name);
+            fragR[1].name = config.TEMP_DIR + '/' + path.basename(fragR[1].name);
+            fragR[2].name = config.TEMP_DIR + '/' + path.basename(fragR[2].name);
+            fragR[3].name = config.TEMP_DIR + '/' + path.basename(fragR[3].name);
+            decodeFile(fragR, name, size).then(() => {
                 resolve()
             }).catch(e => {
                 reject(e)
             });
+        }).catch(e => {
+            console.log(e)
         });
     });
+
+
 };
 
-const download = () => {
+const download = (frags) => {
     return new Promise((resolve, reject) => {
         let asyncsLeft = 0;
         for (let i = 0; i < frags.length; i++) {
             asyncsLeft++;
-            let url = 'http://' + frags[i].name.split("/")[0] + ':4000/downloading/' + path.basename(frags[i].name.split("/")[1]);
+            let url = 'http://' + frags[i].name.split("/")[0] + ':4000/downloading/' + path.basename(frags[i].name);
             axios({
                 method: 'POST',
                 url: url,
                 responseType: 'stream'
             }).then(resp => {
-                let handle = resp.data.pipe(fs.createWriteStream(__dirname + '/../tmp/' + frags[i].name.split("/")[1]));
+                let handle = resp.data.pipe(fs.createWriteStream(__dirname + '/../tmp/' + path.basename(frags[i].name)));
                 handle.on('finish', () => {
                     asyncsLeft--;
                     if (asyncsLeft === 0) {
-                        resolve();
+                        resolve(frags);
                     }
                 });
             }).catch(e => {
@@ -89,22 +87,22 @@ const download = () => {
                     resolve();
                 }
                 logger.warn(e);
+                reject(e)
             });
         }
     });
 
 };
-const decodeFile = () => {
+const decodeFile = (fragS, name, size) => {
     return new Promise((resolve, reject) => {
-        decoder.start(frags, size, decoded).then(() => {
-            logger.info('successfully decoded');
+        decoder.start(fragS, size, name).then(() => {
+            logger.info(`${name} successfully decoded`);
             resolve();
         }).catch((e) => {
             logger.error(e.toString());
             reject();
         });
     });
-
 };
 
 

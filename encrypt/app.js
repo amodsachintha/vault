@@ -9,19 +9,70 @@ const app = express();
 const enc = require('../redundancy/index');
 const logger = require('../logger').getLogger('encrypt');
 const config = require('../config');
-const download = require('../distribute/download').download;
 const fragchain = require('../fragchain/index');
 const cors = require('cors');
 const mimecheck = require('mime');
 const splitfile = require('split-file');
-let chain = null;
-
+const nodeInfo = require('../ml/index');
+const axios = require('axios');
+const regression = require('../ml/prediction');
+const _ = require('lodash');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const uuid = require('uuid/v4');
+const NodeRSA = require('node-rsa');
+const bodyParser = require('body-parser');
 app.use(cors());
+app.use(express.json());
 
 enc.setBlockchainRef(fragchain);
 
 app.get('/', function (req, res) {
     res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/owners', (req, res) => {
+
+    return res.status(200).json()
+});
+
+app.post('/login', (req, res) => {
+    const {username, password} = req.body;
+
+
+});
+
+app.post('/register', (req, res) => {
+    logger.debug(req.body);
+    const username = req.body.username;
+    const password = bcrypt.hashSync(req.body.password);
+    const name = req.body.name;
+    if (name.length >= 3 && username.length >= 4 && req.body.password.length >= 6) {
+        if (fragchain.findUserByUsername(username)) {
+            return res.status(422).json({
+                status: 'fail',
+                msg: 'User Exists'
+            });
+        }
+        const key = new NodeRSA().generateKeyPair(1024, 65537);
+        const user = fragchain.storeUser({
+            uuid: uuid(),
+            name: name,
+            username: username,
+            privateKey: key.exportKey('pkcs8-private'),
+            publicKey: key.exportKey('pkcs8-public'),
+            masterKey: password,
+            createdAt: new Date()
+        });
+        const expiresIn = 24 * 60 * 60;
+        const accessToken = jwt.sign({uuid: user.uuid}, config.JWT_SECRET, {expiresIn: expiresIn});
+        return res.status(201).send({user, accessToken, expiresIn});
+    } else {
+        return res.status(422).json({
+            status: 'fail',
+            msg: 'Input Validation Failed!'
+        });
+    }
 });
 
 app.post('/encrypt', function (req, res) {
@@ -77,10 +128,10 @@ app.post('/encrypt', function (req, res) {
             }
         }
 
-        handle.on('finish', () => {
+        handle.on('finish', async () => {
             logger.warn('Handle Finish');
             logger.info('Starting Transaction Split');
-            splitfile.splitFileBySize(`${config.TEMP_DIR}/${filename}.enc`, config.TRANSACTION_SPLIT_SIZE).then(names => {
+            splitfile.splitFileBySize(`${config.TEMP_DIR}/${filename}.enc`, config.TRANSACTION_SPLIT_SIZE).then(async names => {
                 logger.info('Transaction Split Complete: Parts - ' + names.length);
                 let i = 0;
                 names.forEach(filename => {
@@ -88,6 +139,7 @@ app.post('/encrypt', function (req, res) {
                     block.transactions.push({
                         index: i++,
                         encFragCount: names.length,
+                        txSize: getFilesizeInBytes(filename),
                         fragHash: hash,
                         encFragHash: hash,
                         frags: [],
@@ -105,10 +157,10 @@ app.post('/encrypt', function (req, res) {
                 }
                 logger.info('Starting Encode');
                 let j = 0;
-
                 let promiseArray = [];
+                let ips = await resolveWeightedIps();
                 names.forEach(f => {
-                    promiseArray.push(enc.encodeFile(path.basename(f), block , j++));
+                    promiseArray.push(enc.encodeFile(path.basename(f), block, j++, ips));
                 });
                 Promise.all(promiseArray).then(txes => {
                     fragchain.store(block.owner, block.file, txes);
@@ -136,7 +188,7 @@ app.post('/upload/:filename', function (req, res) {
         req.resume();
     });
     req.on('end', function () {
-        res.send(200);
+        res.sendStatus(200);
     });
 });
 
@@ -187,51 +239,76 @@ app.get('/download/file/:index', (req, res) => {
     }
     if (req.method === 'GET') {
         try {
+            res.setHeader('content-type', 'application/octet-stream');
             fragchain.find(req.params.index).then(block => {
-                let frags = block.transactions[0].frags.map(frag => {
-                    return {
-                        name: frag.fragLocation,
-                        type: frag.index
-                    }
-                });
-                frags.pop();
-                frags.pop();
-
-                logger.warn(frags);
-                let size = block.file.fileSize;
-
-                let filename = block.file.fileName;
-                enc.preDecode(frags, size, 'tmp/' + filename).then(() => {
-                    let decFilePath = __dirname + '/../tmp/' + filename;
-                    logger.info(decFilePath);
-                    let handle = null;
-                    const deCipher = crypto.createDecipher('aes-256-cbc', 'mysecretkey');
-                    try {
-                        res.setHeader('content-type', 'application/octet-stream');
-
-                        if (checkExtension(block.file.extension)) {
-                            // no unzip
-                            handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(res);
-                        } else {
-                            // should unzip
-                            const unzip = zlib.createUnzip();
-                            handle = fs.createReadStream(decFilePath).pipe(deCipher).pipe(unzip).pipe(res);
+                let decodePromiseArray = block.transactions.map(tr => {
+                    let frags = tr.frags.map(frag => {
+                        return {
+                            name: frag.fragLocation,
+                            type: frag.index
                         }
-                        handle.on('finish', () => {
-                            try {
-                                fs.unlinkSync(decFilePath);
-                            } catch (e) {
-                                logger.warn(e.toString())
-                            }
-                            res.end();
+                    });
+                    frags.pop();
+                    frags.pop();
+                    let size = tr.txSize;
+                    let filename = tr.name;
+                    return new Promise((resolve, reject) => {
+                        return enc.preDecode(frags, size, 'tmp/' + filename).then(() => {
+                            resolve(filename);
+                        }).catch(e => {
+                            logger.warn(e);
+                            reject(e)
                         });
-                    } catch (e) {
-                        logger.error(e)
-                    }
+                    });
+                });
+
+                Promise.all(decodePromiseArray).then(decodedFileNames => {
+                    let filenamesWithPath = decodedFileNames.map(f => `${config.TEMP_DIR}/${f}`);
+                    let outfilename = `${config.TEMP_DIR}/${decodedFileNames[0].replace('.sf-part1', '')}`;
+                    splitfile.mergeFiles(filenamesWithPath, outfilename).then(() => {
+                        logger.info('Done');
+                        filenamesWithPath.forEach(f => {
+                            fs.unlink(f, (e) => {
+                                if (e) logger.error(e);
+                            });
+                        });
+                        let handle = null;
+                        const deCipher = crypto.createDecipher('aes-256-cbc', block.key);
+                        try {
+                            if (checkExtension(block.file.extension)) {
+                                // no unzip
+                                logger.debug('inside no unzip');
+                                // handle = fs.createReadStream(outfilename).pipe(deCipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${block.file.fileName}`));
+                                handle = fs.createReadStream(outfilename).pipe(deCipher).pipe(res);
+                            } else {
+                                // should unzip
+                                logger.debug('inside unzip');
+                                const unzip = zlib.createUnzip();
+                                // handle = fs.createReadStream(outfilename).pipe(deCipher).pipe(unzip).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${block.file.fileName}`));
+                                handle = fs.createReadStream(outfilename).pipe(deCipher).pipe(unzip).pipe(res);
+                            }
+                            handle.on('finish', () => {
+                                try {
+                                    fs.unlinkSync(outfilename);
+                                } catch (e) {
+                                    logger.warn(e.toString())
+                                }
+                            });
+                        } catch (e) {
+                            logger.error(e);
+                            res.end();
+                        }
+
+                    }).catch(e => {
+                        logger.error(e);
+                        res.end();
+                    })
+
                 }).catch(e => {
-                    logger.warn(e.toString());
+                    logger.error(e);
                     res.end();
                 });
+
             }).catch(e => {
                 logger.warn(e.toString());
                 res.end()
@@ -242,19 +319,31 @@ app.get('/download/file/:index', (req, res) => {
     }
 });
 
+
+app.get('/node_info', (req, res) => {
+    nodeInfo.getNodeInfo().then(results => {
+        res.send(results);
+    }).catch(e => {
+        logger.error(e);
+        res.sendStatus(500);
+    })
+});
+
+const resolveWeightedIps = async () => {
+    const dd = await getTopIPs();
+    _.orderBy(dd, ['weight'], ['desc']);
+    return dd.map(v => v.ip);
+};
+
 const checkExtension = (extension) => {
     switch (extension) {
         case 'zip':
-            return true;
         case 'rar':
-            return true;
         case '7z':
-            return true;
         case 'tgz':
-            return true;
         case 'gzip':
-            return true;
         case 'mp4':
+        case 'gz':
             return true;
         default:
             return false;
@@ -270,6 +359,31 @@ const startWebServer = () => {
     app.listen(4000, () => {
         logger.info('App listening on port 3000');
     });
+};
+
+const getTopIPs = async () => {
+    // let hosts = config.VAULTS;
+    // hosts.push(ipaddress.address());
+    let ipPromises = config.VAULTS.map(ip => {
+        return new Promise((resolve, reject) => {
+            axios.get(`http://${ip}:4000/node_info`).then(res => {
+                regression.startModel([res.data.total, res.data.free, res.data.used, res.data.status]).then((weight) => {
+                    logger.debug('Weight : ' + weight);
+                    resolve({
+                        ip,
+                        weight
+                    });
+                }).catch((error) => {
+                    logger.error(error);
+                    reject()
+                });
+            }).catch(e => {
+                logger.error(e);
+                reject()
+            });
+        });
+    });
+    return await Promise.all(ipPromises);
 };
 
 module.exports = {startWebServer};

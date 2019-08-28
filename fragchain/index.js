@@ -29,8 +29,16 @@ const getChain = () => {
     return blockchain.getChain();
 };
 
+const storeUser = user => {
+    return blockchain.saveUser(user);
+};
+
 module.exports = {
     store,
     find,
-    getChain
+    getChain,
+    storeUser,
+    findUserByUsername: blockchain.findUserByUsername,
+    findUserByUUID : blockchain.findUserByUUID,
+    getAllUsers: blockchain.getAllUsers
 };
