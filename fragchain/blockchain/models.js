@@ -60,7 +60,7 @@ const Block = {
         version: {type: 'int', default: 1},
         sharedWith: 'string[]',
         previousHash: 'string',
-        owner: {type: 'Owner'},
+        owner: {type: 'string', indexed: true},
         file: {type: 'File'},
         transactions: {type: 'Transaction[]'},
         merkleRoot: 'string',

@@ -33,12 +33,25 @@ const storeUser = user => {
     return blockchain.saveUser(user);
 };
 
+const findUserByUsername = username => {
+  return blockchain.findUserByUsername(username);
+};
+
+const findUserByUUID = uuid => {
+    return blockchain.findUserByUUID(uuid);
+};
+
+const findBlocksByUUID = uuid => {
+    return blockchain.findBlocksByOwner(uuid)
+};
+
 module.exports = {
     store,
     find,
     getChain,
     storeUser,
-    findUserByUsername: blockchain.findUserByUsername,
-    findUserByUUID : blockchain.findUserByUUID,
+    findUserByUUID,
+    findUserByUsername,
+    findBlocksByUUID,
     getAllUsers: blockchain.getAllUsers
 };

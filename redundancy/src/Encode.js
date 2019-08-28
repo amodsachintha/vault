@@ -8,19 +8,20 @@ const config = require('../../config');
 const getHash = require("./HashCheck").getHash;
 const getStringHash = require("./HashCheck").getStringHash;
 
-let mainBuff, mainBuffSize, subBuffSize, shardCount = 4, block, filename;
+let mainBuffSize, subBuffSize, shardCount = 4, block;
 
 const start = (fname, blk, idx) => {
-    filename = `${config.TEMP_DIR}/${fname}`;
-
+    let filename = `${config.TEMP_DIR}/${fname}`;
     block = blk;
     logger.warn(filename);
     return new Promise((resolve, reject) => {
         if (validateInput(filename) === 1) {
-            init();
-            let bl = encode(idx, filename);
+            let mainBuff = fs.readFileSync(filename);
+            init(mainBuff);
+            let bl = encode(idx, filename, mainBuff);
             bl.then((blb) => {
-                resolve(blb)
+                mainBuff = null;
+                resolve(blb);
             });
         } else {
             reject('invalid file');
@@ -28,8 +29,7 @@ const start = (fname, blk, idx) => {
     })
 };
 
-const init = () => {
-    mainBuff = fs.readFileSync(filename);
+const init = (mainBuff) => {
     mainBuffSize = mainBuff.length;
 
     subBuffSize = 0;
@@ -56,7 +56,7 @@ const validateInput = (filename) => {
 };
 
 
-const encode = (idx, f) => {
+const encode = (idx, f, mainBuff) => {
     if (shardCount === 4) {
         let shard1 = mainBuff.slice(0, subBuffSize);
         let shard2 = mainBuff.slice(subBuffSize, subBuffSize * 2);
@@ -129,12 +129,12 @@ const encode = (idx, f) => {
             }
         }
 
-        let p1 = createShard(shard1, getStringHash(block.owner.uuid + '.1' + Date.now() + filename) + '1', 1);
-        let p2 = createShard(shard2, getStringHash(block.owner.uuid + '.2' + Date.now() + filename) + '2', 2);
-        let p3 = createShard(shard3, getStringHash(block.owner.uuid + '.3' + Date.now() + filename) + '3', 3);
-        let p4 = createShard(shard4, getStringHash(block.owner.uuid + '.4' + Date.now() + filename) + '4', 4);
-        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), getStringHash(block.owner.uuid + '.5' + Date.now() + filename) + '5', 5);
-        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + filename) + '6', 6);
+        let p1 = createShard(shard1, getStringHash(block.owner.uuid + '.1' + Date.now() + f) + '1', 1);
+        let p2 = createShard(shard2, getStringHash(block.owner.uuid + '.2' + Date.now() + f) + '2', 2);
+        let p3 = createShard(shard3, getStringHash(block.owner.uuid + '.3' + Date.now() + f) + '3', 3);
+        let p4 = createShard(shard4, getStringHash(block.owner.uuid + '.4' + Date.now() + f) + '4', 4);
+        let p5 = createShard(Buffer.concat([parity1, additionalParity1Bytes]), getStringHash(block.owner.uuid + '.5' + Date.now() + f) + '5', 5);
+        let p6 = createShard(Buffer.concat([parity2, additionalParity2Bytes]), getStringHash(block.owner.uuid + '.6' + Date.now() + f) + '6', 6);
 
         return Promise.all([p1, p2, p3, p4, p5, p6]).then((arr) => {
             console.log(idx);

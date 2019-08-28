@@ -23,7 +23,7 @@ const generateGenesisBlock = () => {
         sharedWith: [],
 
         previousHash: '0000000000000000000000000000000000000000000000000000000000000000',
-        owner: null,
+        owner: 'vault',
         file: null,
         transactions: [],
         timestamp: new Date(),
@@ -59,7 +59,7 @@ const storeBlock = (owner, file, transactions) => {
         sharedWith: [],
 
         previousHash: prevBlock.blockHash,
-        owner: owner,
+        owner: owner.uuid,
         file: file,
         transactions: txs,
         timestamp: new Date(),
@@ -203,10 +203,10 @@ const getLatestBlock = () => {
 };
 
 /* Find all Blocks in the local chain by user.uuid. Returns a promise */
-const findBlocksByOwner = (owner) => {
+const findBlocksByOwner = (uuid) => {
     return new Promise((resolve => {
         let localChain = realm.objects('Block');
-        let filteredBlocks = localChain.filtered('owner.uuid = "' + owner.uuid + '"');
+        let filteredBlocks = localChain.filtered('owner = "' + uuid + '"');
         resolve(filteredBlocks);
     }))
 };
@@ -354,23 +354,45 @@ const findBlockByIndex = (index) => {
     });
 };
 
-const saveUser = user =>{
-    realm.write(() => {
-        realm.create('Owner', {...user});
+const saveUser = user => {
+    return new Promise((resolve, reject) => {
+        try {
+            realm.write(() => {
+                const u = realm.create('Owner', {...user});
+                resolve(u);
+            });
+        } catch (e) {
+            reject(e);
+        }
     });
-    return user;
 };
 
 const findUserByUsername = username => {
-    return realm.objects('Owner').filtered(`username = "${username}"`)[0];
+    return new Promise((resolve, reject) => {
+        let users = realm.objects('Owner');
+        const query = 'username = ' + '"' + username + '"';
+        let user = users.filtered(query);
+        if (user) {
+            resolve(user[0])
+        } else {
+            reject()
+        }
+    });
 };
 
 const findUserByUUID = uuid => {
-    return realm.objects('Owner').filtered(`username = "${uuid}"`)[0];
+    return new Promise((resolve, reject) => {
+        const user = realm.objects('Owner').filtered(`uuid = "${uuid}"`)[0];
+        if (user) {
+            resolve(user)
+        } else {
+            reject()
+        }
+    });
 };
 
 const getAllUsers = () => {
-  return realm.objects('Owner')
+    return realm.objects('Owner')
 };
 
 /* Good old exports */

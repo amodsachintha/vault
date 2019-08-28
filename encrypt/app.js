@@ -22,6 +22,7 @@ const bcrypt = require('bcryptjs');
 const uuid = require('uuid/v4');
 const NodeRSA = require('node-rsa');
 const bodyParser = require('body-parser');
+const asyncPool = require('tiny-async-pool');
 app.use(cors());
 app.use(express.json());
 
@@ -32,41 +33,64 @@ app.get('/', function (req, res) {
 });
 
 app.get('/owners', (req, res) => {
-
-    return res.status(200).json()
+    return res.status(200).json(fragchain.getAllUsers())
 });
 
 app.post('/login', (req, res) => {
-    const {username, password} = req.body;
-
-
+    const username = req.body.username;
+    const password = req.body.password;
+    logger.debug(username);
+    fragchain.findUserByUsername(username).then(user => {
+        logger.debug(user.uuid);
+        if (bcrypt.compareSync(password, user.masterKey)) {
+            const expiresIn = 24 * 60 * 60;
+            const token = jwt.sign({uuid: user.uuid}, config.JWT_SECRET, {expiresIn: expiresIn});
+            res.status(200).json({
+                uuid: user.uuid,
+                username: user.username,
+                token: token,
+                expiresIn: expiresIn
+            });
+        } else {
+            res.status(401).json({status: 'fail', msg: 'Invalid Password!'});
+        }
+    }).catch(() => {
+        res.status(401).json({status: 'fail', msg: 'User not found!'});
+    });
 });
 
 app.post('/register', (req, res) => {
-    logger.debug(req.body);
     const username = req.body.username;
     const password = bcrypt.hashSync(req.body.password);
     const name = req.body.name;
     if (name.length >= 3 && username.length >= 4 && req.body.password.length >= 6) {
-        if (fragchain.findUserByUsername(username)) {
-            return res.status(422).json({
+        fragchain.findUserByUsername(username).then(user => {
+            logger.debug(user.uuid);
+            res.status(422).json({
                 status: 'fail',
                 msg: 'User Exists'
             });
-        }
-        const key = new NodeRSA().generateKeyPair(1024, 65537);
-        const user = fragchain.storeUser({
-            uuid: uuid(),
-            name: name,
-            username: username,
-            privateKey: key.exportKey('pkcs8-private'),
-            publicKey: key.exportKey('pkcs8-public'),
-            masterKey: password,
-            createdAt: new Date()
+        }).catch(() => {
+            const key = new NodeRSA().generateKeyPair(1024, 65537);
+            fragchain.storeUser({
+                uuid: uuid(),
+                name: name,
+                username: username,
+                privateKey: key.exportKey('pkcs8-private'),
+                publicKey: key.exportKey('pkcs8-public'),
+                masterKey: password,
+                createdAt: new Date()
+            }).then(u => {
+                const expiresIn = 24 * 60 * 60;
+                const accessToken = jwt.sign({uuid: u.uuid}, config.JWT_SECRET, {expiresIn: expiresIn});
+                res.status(201).json({u, accessToken, expiresIn});
+            }).catch(e => {
+                res.status(422).json({
+                    status: 'fail',
+                    msg: e
+                });
+            });
         });
-        const expiresIn = 24 * 60 * 60;
-        const accessToken = jwt.sign({uuid: user.uuid}, config.JWT_SECRET, {expiresIn: expiresIn});
-        return res.status(201).send({user, accessToken, expiresIn});
     } else {
         return res.status(422).json({
             status: 'fail',
@@ -75,106 +99,118 @@ app.post('/register', (req, res) => {
     }
 });
 
-app.post('/encrypt', function (req, res) {
-    const block = {
-        owner: {
-            uuid: '000000-00000000-00000000',
-            name: 'amodsachintha',
-            username: 'vault',
-            privateKey: 'vault.genesis',
-            publicKey: 'vault.genesis',
-            masterKey: 'vault.genesis',
-            createdAt: new Date()
-        },
-        file: {
-            fileName: '',
-            fileSize: 0,
-            mimeType: '',
-            extension: '',
-            fileHash: ''
-        },
-        key: 'mysecretkey',
-        transactions: [],
-        timestamp: null
-    };
-    let busboy = new Busboy({headers: req.headers});
-    busboy.on('file', function (fieldname, file, filename, encoding, mimetype) {
-        logger.info(`Uploading: ${filename} mime: ${mimetype}`);
-        block.file.fileName = filename;
-        block.file.fileHash = '';
-        console.log(mimetype);
-        block.file.mimeType = mimetype;
-        block.file.extension = mimecheck.getExtension(mimetype);
-        let handle = null;
+app.post('/encrypt', async (req, res) => {
+    const token = req.get('X-TOKEN');
+    if (!token) {
+        return res.status(401).json({status: 'fail', msg: 'token not found in request'});
+    }
+    try {
+        const tokenData = jwt.verify(token, config.JWT_SECRET);
+        const user = await fragchain.findUserByUUID(tokenData.uuid);
 
-        if (checkExtension(block.file.extension)) {
-            // encrypt only
-            logger.info('Encrypting...');
-            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-            try {
-                handle = file.pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-            } catch (e) {
-                logger.error(e)
-            }
-        } else {
-            // zip and encrypt
-            logger.info('Gzippping and Encrypting...');
-            const zip = zlib.createGzip();
-            const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
-            try {
-                handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
-            } catch (e) {
-                logger.error(e)
-            }
-        }
+        const block = {
+            owner: {
+                uuid: '000000-00000000-00000000',
+                name: 'amodsachintha',
+                username: 'vault',
+                privateKey: 'vault.genesis',
+                publicKey: 'vault.genesis',
+                masterKey: 'vault.genesis',
+                createdAt: new Date()
+            },
+            file: {
+                fileName: '',
+                fileSize: 0,
+                mimeType: '',
+                extension: '',
+                fileHash: ''
+            },
+            key: 'mysecretkey',
+            transactions: [],
+            timestamp: null
+        };
+        let busboy = new Busboy({headers: req.headers});
+        busboy.on('file', function (fieldname, file, filename, encoding, mimetype) {
+            logger.info(`Uploading: ${filename} mime: ${mimetype}`);
+            block.file.fileName = filename;
+            block.file.fileHash = '';
+            console.log(mimetype);
+            block.file.mimeType = mimetype;
+            block.file.extension = mimecheck.getExtension(mimetype);
+            let handle = null;
 
-        handle.on('finish', async () => {
-            logger.warn('Handle Finish');
-            logger.info('Starting Transaction Split');
-            splitfile.splitFileBySize(`${config.TEMP_DIR}/${filename}.enc`, config.TRANSACTION_SPLIT_SIZE).then(async names => {
-                logger.info('Transaction Split Complete: Parts - ' + names.length);
-                let i = 0;
-                names.forEach(filename => {
-                    let hash = md5File.sync(filename);
-                    block.transactions.push({
-                        index: i++,
-                        encFragCount: names.length,
-                        txSize: getFilesizeInBytes(filename),
-                        fragHash: hash,
-                        encFragHash: hash,
-                        frags: [],
-                        rsConfig: '4+2',
-                        name: path.basename(filename),
-                        extension: '.enc',
-                    });
-                });
-
-                block.file.fileSize = getFilesizeInBytes(`${config.TEMP_DIR}/${filename}.enc`);
+            if (checkExtension(block.file.extension)) {
+                // encrypt only
+                logger.info('Encrypting...');
+                const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
                 try {
-                    fs.unlinkSync(`${config.TEMP_DIR}/${filename}.enc`)
+                    handle = file.pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
                 } catch (e) {
-                    logger.error(e);
+                    logger.error(e)
                 }
-                logger.info('Starting Encode');
-                let j = 0;
-                let promiseArray = [];
-                let ips = await resolveWeightedIps();
-                names.forEach(f => {
-                    promiseArray.push(enc.encodeFile(path.basename(f), block, j++, ips));
-                });
-                Promise.all(promiseArray).then(txes => {
-                    fragchain.store(block.owner, block.file, txes);
-                })
-            }).catch(err => {
-                logger.error(err);
-            });
-        });
+            } else {
+                // zip and encrypt
+                logger.info('Gzippping and Encrypting...');
+                const zip = zlib.createGzip();
+                const cipher = crypto.createCipher('aes-256-cbc', 'mysecretkey');
+                try {
+                    handle = file.pipe(zip).pipe(cipher).pipe(fs.createWriteStream(`${config.TEMP_DIR}/${filename}.enc`));
+                } catch (e) {
+                    logger.error(e)
+                }
+            }
 
-    });
-    busboy.on('finish', function () {
-        res.send('done');
-    });
-    req.pipe(busboy);
+            handle.on('finish', async () => {
+                logger.warn('Handle Finish');
+                logger.info('Starting Transaction Split');
+                splitfile.splitFileBySize(`${config.TEMP_DIR}/${filename}.enc`, config.TRANSACTION_SPLIT_SIZE).then(async names => {
+                    logger.info('Transaction Split Complete: Parts - ' + names.length);
+                    let i = 0;
+                    names.forEach(filename => {
+                        let hash = md5File.sync(filename);
+                        block.transactions.push({
+                            index: i++,
+                            encFragCount: names.length,
+                            txSize: getFilesizeInBytes(filename),
+                            fragHash: hash,
+                            encFragHash: hash,
+                            frags: [],
+                            rsConfig: '4+2',
+                            name: path.basename(filename),
+                            extension: '.enc',
+                        });
+                    });
+
+                    block.file.fileSize = getFilesizeInBytes(`${config.TEMP_DIR}/${filename}.enc`);
+                    try {
+                        fs.unlinkSync(`${config.TEMP_DIR}/${filename}.enc`)
+                    } catch (e) {
+                        logger.error(e);
+                    }
+                    logger.info('Starting Encode');
+                    let j = 0;
+
+                    let ips = await resolveWeightedIps();
+
+                    asyncPool(1, names, name => {
+                        return enc.encodeFile(path.basename(name), block, j++, ips);
+                    }).then(txes => {
+                        fragchain.store(user, block.file, txes);
+                    })
+                }).catch(err => {
+                    logger.error(err);
+                });
+            });
+
+        });
+        busboy.on('finish', function () {
+            res.send('done');
+        });
+        req.pipe(busboy);
+
+    } catch (e) {
+
+    }
 });
 
 // handle upload of a fragment
@@ -211,17 +247,31 @@ app.post('/downloading/:filename', function (req, res) {
 });
 
 app.get('/files', (req, res) => {
-    let c = fragchain.getChain();
-    let d = c.map(x => x);
-    d.pop();
-    res.json({
-        blocks: d
-    });
+    const token = req.get('X-TOKEN');
+    if (!token) {
+        return res.status(401).json({status: 'fail', msg: 'token not found in request'});
+    }
+    try {
+        const tokenData = jwt.verify(token, config.JWT_SECRET);
+        fragchain.findUserByUUID(tokenData.uuid).then(user => {
+            console.log(user.masterKey);
+            fragchain.findBlocksByUUID(user.uuid).then(blocks => {
+                let d = blocks.map(x => x);
+                // d.pop();
+                res.json({
+                    blocks: d
+                });
+            }).catch(() => {
+                res.status(422).json({status: 'fail', msg: 'invalid uuid'})
+            });
+        });
+    } catch (e) {
+        return res.status(401).json({status: 'fail', msg: 'token invalid'});
+    }
 });
 
 app.get('/file/:index', (req, res) => {
     let blockIndex = req.params.index;
-
     fragchain.find(blockIndex).then(block => {
         logger.info({
             file_id: block.fileId,
