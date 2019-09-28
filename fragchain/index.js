@@ -53,5 +53,6 @@ module.exports = {
     findUserByUUID,
     findUserByUsername,
     findBlocksByUUID,
-    getAllUsers: blockchain.getAllUsers
+    getAllUsers: blockchain.getAllUsers,
+    deleteFile: blockchain.deleteFile
 };

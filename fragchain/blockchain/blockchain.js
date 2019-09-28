@@ -3,6 +3,7 @@ const {MerkleTree} = require('merkletreejs');
 const SHA256 = require('crypto-js/sha256');
 const logger = require('../../logger').getLogger('blockchain');
 const uuid = require('uuid/v4');
+const _ = require('lodash');
 
 /* Initializes the blockchain. Generates the genesis block when run for the first time. */
 const initializeChain = () => {
@@ -206,9 +207,30 @@ const getLatestBlock = () => {
 const findBlocksByOwner = (uuid) => {
     return new Promise((resolve => {
         let localChain = realm.objects('Block');
-        let filteredBlocks = localChain.filtered('owner = "' + uuid + '"');
+        let filteredBlocks = localChain.filtered(`owner = "${uuid}" AND state != "DELETED"`);
         resolve(filteredBlocks);
     }))
+};
+
+const deleteFile = (fileId) => {
+    return new Promise(((resolve, reject) => {
+        try {
+            realm.write(() => {
+                let filtered = realm.objects('Block').filtered(`fileId = "${fileId}"`);
+                if(filtered.length === 1){
+                    let block = filtered[0];
+                    block.state = "DELETED";
+                    block.version = block.version + 1;
+                    resolve(block);
+                }
+                else {
+                    reject("None Found")
+                }
+            })
+        } catch (e) {
+            reject(e);
+        }
+    }));
 };
 
 /* Validate the Localchain. Returns a promise */
@@ -293,7 +315,6 @@ const replaceChain = (newChain) => {
                     return {
                         index: frag.index,
                         RSfragCount: frag.RSfragCount,
-                        fileHash: frag.fileHash,
                         fragHash: frag.fileHash,
                         fragLocation: frag.fragLocation,
                     }
@@ -413,5 +434,6 @@ module.exports = {
     saveUser,
     findUserByUsername,
     findUserByUUID,
-    getAllUsers
+    getAllUsers,
+    deleteFile
 };

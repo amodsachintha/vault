@@ -21,7 +21,6 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const uuid = require('uuid/v4');
 const NodeRSA = require('node-rsa');
-const bodyParser = require('body-parser');
 const asyncPool = require('tiny-async-pool');
 app.use(cors());
 app.use(express.json());
@@ -257,17 +256,21 @@ app.get('/files', (req, res) => {
             console.log(user.masterKey);
             fragchain.findBlocksByUUID(user.uuid).then(blocks => {
                 let d = blocks.map(x => x);
-                // d.pop();
                 res.json({
                     blocks: d
                 });
-            }).catch(() => {
-                res.status(422).json({status: 'fail', msg: 'invalid uuid'})
+            }).catch((e) => {
+                res.status(422).json({status: 'fail', msg: 'invalid uuid'});
+                logger.debug(e);
             });
         });
     } catch (e) {
         return res.status(401).json({status: 'fail', msg: 'token invalid'});
     }
+});
+
+app.get('/shared',(req, res) => {
+
 });
 
 app.get('/file/:index', (req, res) => {
@@ -281,6 +284,21 @@ app.get('/file/:index', (req, res) => {
         });
         res.json(block);
     });
+});
+
+app.get('/delete/:fileId', (req, res) => {
+    fragchain.deleteFile(req.params.fileId).then( block => {
+        // todo delete remote files
+        logger.debug(block.fileId);
+        res.status(200).json({
+            code: 200,
+            data: block.fileId
+        })
+    }).catch(() => {
+        res.status(500).json({
+            code: 500
+        })
+    })
 });
 
 app.get('/download/file/:index', (req, res) => {
