@@ -9,9 +9,9 @@ logger.info('Initializing....');
 blockchain.initializeChain();
 messenger.initMessenger(blockchain);
 
-const store = (owner, file, transactions) => {
+const store = (owner, file, transactions, state='STORED') => {
     return new Promise((resolve, reject) => {
-        blockchain.storeBlock(owner, file, transactions).then((block) => {
+        blockchain.storeBlock(owner, file, transactions, state).then((block) => {
             messenger.broadcast(CONSTANTS.BROADCAST_NEW_BLOCK, block);
             resolve(block);
         }).catch(e => {
@@ -54,5 +54,6 @@ module.exports = {
     findUserByUsername,
     findBlocksByUUID,
     getAllUsers: blockchain.getAllUsers,
-    deleteFile: blockchain.deleteFile
+    deleteFile: blockchain.deleteFile,
+    findBlockByFileID: blockchain.findBlockByFileID
 };

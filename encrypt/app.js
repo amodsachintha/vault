@@ -269,8 +269,17 @@ app.get('/files', (req, res) => {
     }
 });
 
-app.get('/shared',(req, res) => {
+app.post('/share', (req, res) => {
+    fragchain.findBlockByFileID(req.body.fileID).then(async blk => {
+        const owner = await fragchain.findUserByUUID(req.body.uuid);
+        fragchain.store(owner, blk.file, blk.transactions, 'SHARED');
+        const msg = `${blk.file.fileName} was successfully shared with ${owner.username}`;
+        res.status(200).json({msg});
+    });
+});
 
+app.get('/users', (req, res) => {
+    return res.status(200).json(fragchain.getAllUsers());
 });
 
 app.get('/file/:index', (req, res) => {
@@ -287,7 +296,7 @@ app.get('/file/:index', (req, res) => {
 });
 
 app.get('/delete/:fileId', (req, res) => {
-    fragchain.deleteFile(req.params.fileId).then( block => {
+    fragchain.deleteFile(req.params.fileId).then(block => {
         // todo delete remote files
         logger.debug(block.fileId);
         res.status(200).json({
@@ -299,6 +308,10 @@ app.get('/delete/:fileId', (req, res) => {
             code: 500
         })
     })
+});
+
+app.get('/serverStatus', (req, res) => {
+    return res.status(200).json({msg: 'ok'});
 });
 
 app.get('/download/file/:index', (req, res) => {

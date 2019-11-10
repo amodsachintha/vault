@@ -47,7 +47,7 @@ const generateGenesisBlock = () => {
 };
 
 /* Store a block in the local-chain. returns a Promise. */
-const storeBlock = (owner, file, transactions) => {
+const storeBlock = (owner, file, transactions, state='STORED') => {
     // previous block is the latest block
     const prevBlock = getLatestBlock();
     const txs = transactions.map(tx => createTransaction(tx.frags, tx.index, tx.encFragCount, tx.txSize, tx.fragHash, tx.encFragHash, tx.rsConfig, tx.name, tx.extension));
@@ -55,7 +55,7 @@ const storeBlock = (owner, file, transactions) => {
         index: prevBlock.index + 1,
 
         fileId: uuid(),
-        state: 'STORED',
+        state: state,
         version: 1,
         sharedWith: [],
 
@@ -217,13 +217,12 @@ const deleteFile = (fileId) => {
         try {
             realm.write(() => {
                 let filtered = realm.objects('Block').filtered(`fileId = "${fileId}"`);
-                if(filtered.length === 1){
+                if (filtered.length === 1) {
                     let block = filtered[0];
                     block.state = "DELETED";
                     block.version = block.version + 1;
                     resolve(block);
-                }
-                else {
+                } else {
                     reject("None Found")
                 }
             })
@@ -416,6 +415,19 @@ const getAllUsers = () => {
     return realm.objects('Owner')
 };
 
+const findBlockByFileID = fileID => {
+    return new Promise(((resolve, reject) => {
+        let blocks = realm.objects('Block');
+        const query = 'fileId = ' + '"' + fileID + '"';
+        let filtered = blocks.filtered(query);
+        if (filtered)
+            resolve(filtered[0]);
+        else
+            reject();
+    }));
+
+};
+
 /* Good old exports */
 module.exports = {
     initializeChain,
@@ -435,5 +447,6 @@ module.exports = {
     findUserByUsername,
     findUserByUUID,
     getAllUsers,
-    deleteFile
+    deleteFile,
+    findBlockByFileID
 };
