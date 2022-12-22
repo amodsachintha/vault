@@ -20,7 +20,7 @@
     "express": "^4.17.1",
     "fs": "0.0.1-security",
     "ip": "^1.1.5",
-    "jsonwebtoken": "^8.5.1",
+    "jsonwebtoken": "^9.0.0",
     "lodash": "^4.17.15",
     "md5-file": "^4.0.0",
     "merkletreejs": "^0.1.6",
